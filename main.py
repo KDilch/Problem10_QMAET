@@ -1,4 +1,6 @@
 from __future__ import division
+import multiprocessing
+import itertools
 import numpy as np
 from scipy import optimize
 from scipy import special
@@ -55,15 +57,7 @@ def maximum_likelihood_func_minus1(n0, n1, n2, n3):
     return func
 
 
-max_num_experiments = 1000  # a.k.a. N
-num_experiments_step = 50
-num_parameter_values = 10000  # shall be evenly spaced in [0,2*Pi]
-
-num_experiments_array = np.arange(3, max_num_experiments, num_experiments_step)
-parameter_values = np.arange(0, 2*np.pi, 2*np.pi/num_parameter_values)
-average_cost_arrs = {}
-
-for num_experiments in num_experiments_array:
+def run_simulation(parameter_values, num_experiments):
     costs_arr = []
     for parameter_value in parameter_values:
         with np.errstate(divide='raise'):
@@ -75,21 +69,38 @@ for num_experiments in num_experiments_array:
                 continue
     if costs_arr:
         average_cost = sum(costs_arr)/len(costs_arr)
-        average_cost_arrs[num_experiments] = average_cost
-    print(average_cost_arrs)
+    return num_experiments, average_cost
 
 
-num_measurements_optimal_cost = []
-optimal_cost_arr = []
-for measurementn in np.arange(2, max_num_experiments, 1):
-    num_measurements_optimal_cost.append(measurementn)
-    optimal_cost_arr.append(cost_optimal(measurementn))
+def main():
+    max_num_experiments = 1000  # a.k.a. N
+    num_experiments_step = 10
+    num_parameter_values = 10000  # shall be evenly spaced in [0,2*Pi]
 
-fig = plt.figure()
-ax = plt.gca()
-(num_exp, cost_estim) = zip(*average_cost_arrs.items())
-ax.scatter(num_exp, cost_estim, c='red')
-ax.plot(num_measurements_optimal_cost, optimal_cost_arr)
-ax.set_yscale('log')
-ax.set_xscale('log')
-plt.show()
+    num_experiments_array = np.arange(3, max_num_experiments, num_experiments_step)
+    parameter_values = np.arange(0, 2*np.pi, 2*np.pi/num_parameter_values)
+
+    args_tuples = tuple(zip(itertools.repeat(parameter_values, len(num_experiments_array)), num_experiments_array))
+    pool = multiprocessing.Pool(processes=4)
+    simulation_results = pool.starmap(run_simulation, args_tuples)
+    pool.close()
+    pool.join()
+    num_measurements_optimal_cost = []
+    optimal_cost_arr = []
+    print(simulation_results)
+    for measurementn in np.arange(2, max_num_experiments, 1):
+        num_measurements_optimal_cost.append(measurementn)
+        optimal_cost_arr.append(cost_optimal(measurementn))
+
+    fig = plt.figure()
+    ax = plt.gca()
+    (num_exp, cost_estim) = zip(*simulation_results)
+    ax.scatter(num_exp, cost_estim, c='red')
+    ax.plot(num_measurements_optimal_cost, optimal_cost_arr)
+    ax.set_yscale('log')
+    ax.set_xscale('log')
+    plt.show()
+    return
+
+if __name__ == '__main__':
+    main()
